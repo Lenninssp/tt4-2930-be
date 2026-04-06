@@ -4,6 +4,10 @@
   "description": "test",
   "main": "src/server.js",
   "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "run": "npm run dev",
+    "build": "npm --prefix frontend install && npm --prefix frontend run build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
