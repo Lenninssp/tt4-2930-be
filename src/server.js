@@ -1,4 +1,5 @@
 const path = require("path");
+const express = require("express");
 const dotenv = require("dotenv");
 
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
@@ -6,17 +7,30 @@ dotenv.config({ path: path.resolve(__dirname, "../.env") });
 const { connectDB } = require("./config/db");
 const app = require("./app");
 
-const startServer = async () => {
-    try{
-        await connectDB();
+const PORT = process.env.PORT || 3000;
 
-        app.listen(3000, ()=>{
-            console.log("Server is running...");
-        });
-    }catch(error){
-        console.error("Failed to start server", error);
-        process.exit(1);
-    }
+const startServer = async () => {
+  try {
+    await connectDB();
+    app.use(
+      "/frontend",
+      express.static(path.join(__dirname, "../frontend/dist/frontend/browser")),
+    );
+
+    app.get("/frontend", (req, res) => {
+      res.sendFile(
+        path.join(__dirname, "../frontend/dist/frontend/browser/index.html"),
+      );
+    });
+
+
+    app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error("Failed to start server", error);
+    process.exit(1);
+  }
 };
 
 startServer();
