@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Task = require("../models/Task");
 const User = require("../models/User");
+const { broadcastTaskEvent } = require("../ws/taskEvents");
 
 const taskPopulate = [
   { path: "userId", select: "_id name email" },
@@ -26,6 +27,16 @@ const resolveAssignedUserId = async (assignedUserId) => {
   }
 
   return assignedUser._id;
+};
+
+const getTaskRecipients = (task) => {
+  const recipients = new Set([String(task.userId._id || task.userId)]);
+
+  if (task.assignedUserId) {
+    recipients.add(String(task.assignedUserId._id || task.assignedUserId));
+  }
+
+  return recipients;
 };
 
 const createTask = async (req, res) => {
@@ -112,6 +123,12 @@ const deleteTask = async (req, res) => {
 
         await task.deleteOne();
 
+        broadcastTaskEvent({
+            type: "task.deleted",
+            recipients: getTaskRecipients(task),
+            taskId: task._id.toString()
+        });
+
         return res.status(200).json({
             message: "Task deleted successfully",
             data: { task }
@@ -178,10 +195,27 @@ const updateTask = async (req, res) => {
         }
     }
 
+    const previousAssignedUserId = task.assignedUserId ? task.assignedUserId.toString() : null;
+
     const updatedTask = await Task.findByIdAndUpdate(id, updatePayload, {
         new: true,
         runValidators: true
     }).populate(taskPopulate);
+
+    const updatedRecipients = getTaskRecipients(updatedTask);
+    broadcastTaskEvent({
+        type: "task.updated",
+        recipients: updatedRecipients,
+        task: updatedTask
+    });
+
+    if (previousAssignedUserId && previousAssignedUserId !== String(updatedTask.assignedUserId?._id || updatedTask.assignedUserId || "")) {
+        broadcastTaskEvent({
+            type: "task.deleted",
+            recipients: new Set([previousAssignedUserId]),
+            taskId: updatedTask._id.toString()
+        });
+    }
 
     return res.status(200).json({
         message: "Task Updated Successfully",
