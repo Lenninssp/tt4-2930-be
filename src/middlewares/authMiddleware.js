@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const { jwtSecret } = require("../config/auth");
 
 const authMiddleware = (req, res, next) => {
 
@@ -12,8 +13,6 @@ const authMiddleware = (req, res, next) => {
 
     const token = authHeader.split(" ")[1];
     console.log(token)
-
-    const jwtSecret = "iajsdas9d020";
 
     try{
         const decoded = jwt.verify(token, jwtSecret);
