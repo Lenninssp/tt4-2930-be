@@ -1,11 +1,13 @@
 const path = require("path");
 const express = require("express");
 const dotenv = require("dotenv");
+const http = require("http");
 
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 const { connectDB } = require("./config/db");
 const app = require("./app");
+const { attachTaskEventServer } = require("./ws/taskEvents");
 
 const PORT = process.env.PORT || 3000;
 
@@ -24,7 +26,10 @@ const startServer = async () => {
     });
 
 
-    app.listen(PORT, () => {
+    const server = http.createServer(app);
+    attachTaskEventServer(server);
+
+    server.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
     });
   } catch (error) {
