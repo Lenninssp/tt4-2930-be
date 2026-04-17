@@ -1,29 +1,25 @@
-test
+# Task API
 
-EXAMPLE ENDPOINTS
+## Run locally
 
-app.get("/", (req, res) => {
-    console.log(req);
-    // res.send("<h1>TEST</h1>");
-    return res.json({
-        message: "API endpoint is working!"
-    });
-});
+1. Install dependencies with `npm install`.
+2. Start the backend with `npm run dev`.
+3. Start the Angular app from `frontend/` with `npm start`.
 
-app.post("/test", (req, res) => {
-    console.log(req);
-    return res.json({
-        message: "API endpoint /test is working!",
-        data: {
-            ok: true,
-            tip: "Data json test endpoint!"
-        }
-    });
-});
+The API reads `PORT` and `JWT_SECRET` from `.env`. If `JWT_SECRET` is not set, the app falls back to the current default secret.
 
+## Real-time task events
 
-START APP:
+The backend now exposes an authenticated WebSocket endpoint at `/ws/tasks`.
 
-// app.listen(5000, ()=>{
-//     console.log("Server is running...");
-// });
+- Authentication: pass the same JWT used for the REST API as the `token` query parameter.
+- Event `task.updated`: emitted when a task is modified. The payload includes the full populated task document.
+- Event `task.deleted`: emitted when a task is deleted or when an assignee loses access after reassignment. The payload includes `taskId`.
+
+Example connection:
+
+```text
+ws://localhost:3000/ws/tasks?token=<jwt>
+```
+
+The Angular dashboard subscribes to these events and updates the task list in place, so task edits and deletions appear without a manual refresh.
