@@ -1,12 +1,14 @@
 import { CommonModule, DatePipe } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { forkJoin } from 'rxjs';
 import { finalize } from 'rxjs/operators';
 
 import { AuthService } from '../../core/auth.service';
 import { TaskItem, UserProfile } from '../../core/models';
+import { TaskRealtimeService } from '../../core/task-realtime.service';
 import { TaskService } from '../../core/task.service';
 import { UserService } from '../../core/user.service';
 
@@ -21,8 +23,10 @@ export class DashboardPageComponent {
   private readonly fb = inject(FormBuilder);
   private readonly authService = inject(AuthService);
   private readonly taskService = inject(TaskService);
+  private readonly taskRealtimeService = inject(TaskRealtimeService);
   private readonly userService = inject(UserService);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly currentUser = computed(() => this.authService.currentUser());
   readonly tasks = signal<TaskItem[]>([]);
@@ -42,6 +46,7 @@ export class DashboardPageComponent {
 
   constructor() {
     this.loadDashboard();
+    this.subscribeToTaskEvents();
   }
 
   get isEditing(): boolean {
@@ -104,9 +109,9 @@ export class DashboardPageComponent {
       : this.taskService.createTask(payload);
 
     request$.pipe(finalize(() => this.isSavingTask.set(false))).subscribe({
-      next: () => {
+      next: (response) => {
         this.resetForm();
-        this.refreshTasks();
+        this.upsertTask(response.data.task);
       },
       error: (error) => {
         this.pageError.set(error.error?.message ?? 'Could not save the task.');
@@ -127,7 +132,7 @@ export class DashboardPageComponent {
 
   toggleTask(task: TaskItem): void {
     this.taskService.updateTask(task._id, { done: !task.done }).subscribe({
-      next: () => this.refreshTasks(),
+      next: (response) => this.upsertTask(response.data.task),
       error: (error) => {
         this.pageError.set(error.error?.message ?? 'Could not update the status.');
       },
@@ -137,10 +142,7 @@ export class DashboardPageComponent {
   deleteTask(task: TaskItem): void {
     this.taskService.deleteTask(task._id).subscribe({
       next: () => {
-        if (this.editingTaskId() === task._id) {
-          this.resetForm();
-        }
-        this.refreshTasks();
+        this.removeTask(task._id);
       },
       error: (error) => {
         this.pageError.set(error.error?.message ?? 'Could not remove the task.');
@@ -168,14 +170,45 @@ export class DashboardPageComponent {
     return task.userId._id === this.currentUser()?.id;
   }
 
-  private refreshTasks(): void {
-    this.taskService.getTasks().subscribe({
-      next: (response) => {
-        this.tasks.set(response.data.tasks);
-      },
-      error: (error) => {
-        this.pageError.set(error.error?.message ?? 'Could not reload the tasks.');
-      },
-    });
+  private subscribeToTaskEvents(): void {
+    const token = this.authService.token();
+
+    if (!token) {
+      return;
+    }
+
+    this.taskRealtimeService
+      .watchTaskEvents(token)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (event) => {
+          if (event.type === 'task.updated' && event.data.task) {
+            this.upsertTask(event.data.task);
+            return;
+          }
+
+          if (event.type === 'task.deleted' && event.data.taskId) {
+            this.removeTask(event.data.taskId);
+          }
+        },
+        error: () => {
+          this.pageError.set('Real-time task updates are unavailable right now.');
+        },
+      });
+  }
+
+  private upsertTask(task: TaskItem): void {
+    const nextTasks = this.tasks().filter((currentTask) => currentTask._id !== task._id);
+    nextTasks.push(task);
+    nextTasks.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+    this.tasks.set(nextTasks);
+  }
+
+  private removeTask(taskId: string): void {
+    this.tasks.set(this.tasks().filter((task) => task._id !== taskId));
+
+    if (this.editingTaskId() === taskId) {
+      this.resetForm();
+    }
   }
 }
