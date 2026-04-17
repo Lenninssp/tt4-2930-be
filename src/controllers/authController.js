@@ -1,10 +1,9 @@
 const User = require("../models/User");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const { jwtSecret } = require("../config/auth");
 
 const generateToken = (id, email) => {
-    const jwtSecret = "iajsdas9d020";
-
     return jwt.sign({id, email}, jwtSecret, {expiresIn: "1d"});
 }
 
